@@ -5,10 +5,19 @@
 import streamlit as st
 
 # Try to import the backend and handle errors gracefully
+
+# Add the parent directory to the Python path
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print("Path agregado:", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+print("Path actual:", os.getcwd())
+print("sys.path:", sys.path)
+
 try:
     import Backend.chatbot_logic as bot
 except ModuleNotFoundError as e:
-    st.error("Error: No se encontró el archivo 'chatbot_logic.py'. Asegúrate de que esté en el mismo directorio.", e)
+    st.error(f"Error: No se encontró el archivo 'chatbot_logic.py'. {e}")
     st.stop()
 except Exception as e:
     st.error(f"Ocurrió un error inesperado al cargar el módulo del bot: {e}")
