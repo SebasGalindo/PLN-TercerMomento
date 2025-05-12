@@ -4,5 +4,5 @@ setup(
     name="pln-tercer-momento",
     version="0.1",
     author="John Sebastian Galindo",
-    packages=find_packages()
+    packages=find_packages(include=['Backend', 'Backend.*'])
 )
