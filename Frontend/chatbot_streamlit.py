@@ -6,14 +6,9 @@ import streamlit as st
 
 # Try to import the backend and handle errors gracefully
 try:
-    # This is not going to work if the Backend folder is not installed with pip install -e .
-    from Backend import chatbot_logic as bot
-except ImportError:
-    st.error(
-        "Error: No se pudo importar 'Backend.chatbot_logic'. "
-        "Asegúrate de que el archivo exista en la ruta correcta y "
-        "que no haya errores de sintaxis en él."
-    )
+    import Backend.chatbot_logic as bot
+except ModuleNotFoundError as e:
+    st.error("Error: No se encontró el archivo 'chatbot_logic.py'. Asegúrate de que esté en el mismo directorio.", e)
     st.stop()
 except Exception as e:
     st.error(f"Ocurrió un error inesperado al cargar el módulo del bot: {e}")
