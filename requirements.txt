@@ -49,6 +49,7 @@ referencing==0.36.2
 requests==2.32.3
 rpds-py==0.23.1
 rsa==4.9.1
+scikit-learn==1.6.1
 scipy==1.15.3
 six==1.17.0
 smmap==5.0.2
@@ -57,6 +58,7 @@ soupsieve==2.7
 streamlit==1.43.2
 streamlit-image_uploader==0.0.2
 tenacity==9.0.0
+threadpoolctl==3.6.0
 toml==0.10.2
 tornado==6.4.2
 typing-inspection==0.4.0
