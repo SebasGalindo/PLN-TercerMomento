@@ -33,8 +33,6 @@ pandas==2.2.3
 peewee==3.18.1
 pillow==11.1.0
 platformdirs==4.3.8
--e git+https://github.com/SebasGalindo/PLN-TercerMomento.git@3baeb7567e97c844fb54aa08d80ecb426c2b8917#egg=pln_tercer_momento
-pln_tercer_momento==0.1
 -e .
 plotly==6.0.1
 protobuf==5.29.4
