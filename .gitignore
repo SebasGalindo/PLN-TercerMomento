@@ -1,0 +1,6 @@
+# Ignore virtual environment
+/venv
+
+# Ignore credentials
+/Data/credentials.json
+/.streamlit/secrets.toml
