@@ -14,6 +14,8 @@ from google.genai import types as google_genai_types
 from pydantic import BaseModel, Field # for define the schema for Gemini
 import re # for remove multiple spaces
 import streamlit as st # for access to secrets in the deployed app
+import matplotlib.pyplot as plt # for plot the annual profit, the annual debt and the annual accounts receivable
+import io # for save the plot as image
 # endregion
 
 #region 1. Pydantic Models for `response_schema` in order to receive a structured JSON response from Gemini
@@ -263,7 +265,6 @@ def send_message_to_chat(
         import traceback; traceback.print_exc()
         return None, error_msg
 
-
 def _convert_to_cop(value_str: str, original_currency: Optional[str]) -> float:
     """
     EN: Converts a value from a given currency to COP (Colombian Peso).
@@ -408,32 +409,76 @@ def run_lgbm_analysis(conversation_state_dict: Dict[str, Any]) -> Optional[str]:
     return str(prediction_label)
 
 
-def generate_final_message_with_advice(lgbm_category: str, company_name: Optional[str]) -> str:
+def generate_final_message_with_advice(conversation_state_dict: dict, lgbm_category: str) -> tuple:
     """
-    EN: Generates a final message with advice based on the LGBM category.
-    Args:
-        lgbm_category (str): The category predicted by the LGBM model.
-        company_name (Optional[str]): The name of the company, if available.
-    Returns:
-        str: The final message with advice.
-    Raises:
-        ValueError: If the lgbm_category is not one of the expected values.
-        Exception: If an unexpected error occurs.
-    -----
-    ES: Genera un mensaje final con consejos basados en la categoría del LGBM.
-    Args:
-        lgbm_category (str): La categoría predicha por el modelo LGBM.
-        company_name (Optional[str]): El nombre de la empresa, si está disponible.
-    Returns:
-        str: El mensaje final con consejos.
-    Raises:
-        ValueError: Si la categoría del LGBM no es una de las esperadas.
-        Exception: Si ocurre un error inesperado.
+    Generates a final message with advice and a bar plot based on the conversation state and LGBM category.
+    Returns (message: str, fig: plt.Figure)
     """
+    # Extract values from conversation_state_dict
+    completed_fields = conversation_state_dict.get('completed_fields', [])
+    def get_field(name):
+        for f in completed_fields:
+            if f.get('name') == name:
+                return f.get('value'), f.get('currency', 'COP')
+        return None, 'COP'
     
+    profit_val, profit_cur = get_field('ingresos_o_activos')
+    debts_val, debts_cur = get_field('valor_deudas')
+    cartera_val, cartera_cur = get_field('valor_cartera')
+    company_name, _ = get_field('nombre_empresa')
+    sector, _ = get_field('area_categoria')
+    
+    annual_profit = _convert_to_cop(profit_val, profit_cur)
+    annual_debts = _convert_to_cop(debts_val, debts_cur)
+    annual_cartera = _convert_to_cop(cartera_val, cartera_cur)
+    
+    equity = annual_profit - annual_debts
+    reason_of_debt = annual_debts / annual_profit if annual_profit else 0.0
+    
+    # Umbral logic
+    base_umbrals = {'critica': 0.8, 'vulnerable': 0.6, 'estable': 0.4, 'solida': 0.2}
+    sector = (sector or '').lower()
+    if any(s in sector for s in ['primario', 'primaria', 'secundario', 'secundaria']):
+        umbrals = {k: v * 1.15 for k, v in base_umbrals.items()}
+        sector_note = 'El sector es primario/secundario, los umbrales de deuda aumentan 15%.'
+    elif 'cuaternario' in sector:
+        umbrals = {k: v * 0.9 for k, v in base_umbrals.items()}
+        sector_note = 'El sector es cuaternario, los umbrales de deuda son 10% más estrictos.'
+    else:
+        umbrals = base_umbrals.copy()
+        sector_note = 'El sector es terciario u otro, se usan los umbrales base.'
+    
+    # Clasificación por reason_of_debt
+    if reason_of_debt >= umbrals['critica']:
+        debt_tag = 'Crítica'
+        debt_msg = 'La razón de endeudamiento es crítica.'
+    elif reason_of_debt >= umbrals['vulnerable']:
+        debt_tag = 'Vulnerable'
+        debt_msg = 'La razón de endeudamiento es vulnerable.'
+    elif reason_of_debt >= umbrals['estable']:
+        debt_tag = 'Estable'
+        debt_msg = 'La razón de endeudamiento es estable.'
+    elif reason_of_debt >= umbrals['solida']:
+        debt_tag = 'Sólida'
+        debt_msg = 'La razón de endeudamiento es sólida.'
+    else:
+        debt_tag = 'Excelente'
+        debt_msg = 'La razón de endeudamiento es excelente.'
+    
+    # Build the message
     company_str = f"para **{company_name}**" if company_name else "para tu empresa"
     base_message = f"### 📊 Resultado del Análisis Financiero Preliminar {company_str}\n\n"
     base_message += f"Tras analizar los datos, la clasificación preliminar de la salud financiera es: **{lgbm_category}**.\n\n"
+    base_message += f"**Cálculos clave:**\n\n"
+    base_message += f"- **Utilidad/Ingresos anuales:** ${annual_profit:,.0f}\n"
+    base_message += f"- **Deudas anuales:** ${annual_debts:,.0f}\n"
+    base_message += f"- **Cartera/Cuentas por cobrar:** ${annual_cartera:,.0f}\n"
+    base_message += f"- **Patrimonio estimado:** ${equity:,.0f}\n"
+    base_message += f"- **Razón de endeudamiento:** {reason_of_debt:.2f} ({debt_tag})\n"
+    base_message += f"- {sector_note}\n\n"
+    base_message += f"{debt_msg}\n\n"
+    
+    # Add recommendations
     advice = ""
     if lgbm_category == "En Quiebra Técnica / Insolvente":
         advice = """
@@ -489,13 +534,18 @@ def generate_final_message_with_advice(lgbm_category: str, company_name: Optiona
         * 🌟 **Legado y Sostenibilidad:** Piensa en cómo mantener esta excelencia a muy largo plazo y el impacto que puedes generar.
         *¡Felicidades por una gestión financiera impecable! Eres un referente.*
         """
-    else: # Unknown category
+    else:
         advice = "No tengo consejos específicos para esta categoría, pero te recomiendo revisar tus finanzas detalladamente con un profesional. 👍"
-    final_message = base_message + advice + f"\n\n¡Mucha suerte con {company_name}! Espero que este análisis preliminar te sea de utilidad. 😊"
     
-    # Remove extra quotes and spaces
+    final_message = base_message + advice + f"\n\n¡Mucha suerte con {company_name or 'tu empresa'}! Espero que este análisis preliminar te sea de utilidad. 😊"
     final_message = final_message.replace('"""', "")
     final_message = re.sub(r'[ \t]+', ' ', final_message)
-    # print(f"\n--- Mensaje Final para el Usuario ---\n{final_message}")
-    return final_message
+    
+    final_info = {
+        "annual_profit": annual_profit,
+        "annual_debts": annual_debts,
+        "annual_cartera": annual_cartera
+    }
+    
+    return final_message, final_info
 #endregion

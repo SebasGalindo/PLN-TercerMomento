@@ -3,6 +3,7 @@
 # Authors: John Sebastián Galindo Hernández y Miguel Ángel Moreno Beltrán
 
 import streamlit as st
+import matplotlib.pyplot as plt
 
 # Try to import the backend and handle errors gracefully
 
@@ -49,7 +50,7 @@ def initialize_new_chat_session():
     st.session_state.chatbot_state = None # This will be updated with the first response from the bot
     st.session_state.chat_history = []
     st.session_state.analysis_done = False # Flag to control if the final analysis has been shown
-
+    
     # A fixed initial greeting and the bot will respond to the first user input.
     initial_greeting = """
     ¡Hola! 👋 Soy un chatbot diseñado para ayudarte a realizar una **evaluación preliminar** de la salud financiera de tu empresa 📊. 
@@ -72,7 +73,6 @@ def initialize_new_chat_session():
     """
     st.session_state.chat_history.append({"role": "assistant", "content": initial_greeting})
 
-
 # --- Sidebar ---
 st.sidebar.title("Opciones")
 if st.sidebar.button("✨ Nuevo Chat", key="new_chat_button"):
@@ -87,6 +87,8 @@ if 'gemini_chat_session' not in st.session_state:
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"]) 
+        if "bar_chart" in message:
+            st.pyplot(message["bar_chart"])
 
 # --- Get User Input ---
 # Disable input if final analysis has been shown
@@ -149,15 +151,28 @@ if user_prompt:
                                         company_name = cf.get("value", "tu empresa")
                                         break
                             
-                            final_analysis_message = bot.generate_final_message_with_advice(
-                                lgbm_category,
-                                company_name
+                            final_analysis_message, final_info = bot.generate_final_message_with_advice(
+                                st.session_state.chatbot_state,
+                                lgbm_category
                             )
                         else:
                             final_analysis_message = f"Lo siento, hubo un problema al generar el análisis final: {lgbm_category or 'Resultado vacío.'}"
-                        
+                            final_info = None
                         st.markdown(final_analysis_message) # Show the final analysis result
-                        st.session_state.chat_history.append({"role": "assistant", "content": final_analysis_message})
+                        if final_info:
+                            print("Mostrando gráfico final...")
+                            annual_profit = final_info.get("annual_profit", 0)
+                            annual_debts = final_info.get("annual_debts", 0)
+                            annual_cartera = final_info.get("annual_cartera", 0)
+                            # Generate bar plot
+                            fig, ax = plt.subplots(figsize=(6,4))
+                            bars = ax.bar(['Utilidad/Ingresos', 'Deudas', 'Cartera'], [annual_profit, annual_debts, annual_cartera], color=['#4CAF50', '#F44336', '#2196F3'])
+                            ax.set_ylabel('Valor (COP)')
+                            ax.set_title('Resumen Financiero Anual')
+                            ax.bar_label(bars, fmt='${:,.0f}')
+                            plt.tight_layout()
+                            
+                        st.session_state.chat_history.append({"role": "assistant", "content": final_analysis_message, "bar_chart": fig})
                         st.rerun() # Forzar rerun para deshabilitar input y mostrar el mensaje final correctamente.
                     else:
                         err_msg_state = "Error: El estado de la conversación no está disponible para el análisis final."
